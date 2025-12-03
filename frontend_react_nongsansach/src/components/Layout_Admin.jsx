@@ -40,7 +40,7 @@ export default function Layout_Admin() {
           </li>
 
           <li className="nav-item mb-2">
-            <NavLink to="/quanli/khuyenmai" className={({ isActive }) =>
+            <NavLink to="/quanli_khuyenmai" className={({ isActive }) =>
               "nav-link text-white " + (isActive ? "active-link" : "")
             }>
               <i className="bi bi-percent"></i> Khuyến Mãi
@@ -48,7 +48,7 @@ export default function Layout_Admin() {
           </li>
 
           <li className="nav-item mb-2">
-            <NavLink to="/quanli/thongke" className={({ isActive }) =>
+            <NavLink to="/thongkehoadon" className={({ isActive }) =>
               "nav-link text-white " + (isActive ? "active-link" : "")
             }>
               <i className="bi bi-bar-chart"></i> Thống kê

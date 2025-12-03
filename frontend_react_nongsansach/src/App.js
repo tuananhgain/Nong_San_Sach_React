@@ -13,6 +13,8 @@ import DangKy from "./pages/DangKy";
 import DangNhap from "./pages/DangNhap";
 import Layout_Admin from "./components/Layout_Admin";
 import QuanLyHoaDon from "./pages/QuanLy_HoaDon";
+import QuanLyKhuyenMai from "./pages/QuanLy_KhuyenMai";
+import ThongKeHoaDon from "./pages/ThongKeHoaDon";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { MessageProvider } from "./context/MessageContext";
 
@@ -37,6 +39,8 @@ export default function App() {
         </Route>
         <Route element={<Layout_Admin />}>
           <Route path="/quanlyhoadon" element={<QuanLyHoaDon />} />
+          <Route path="/quanli_khuyenmai" element={<QuanLyKhuyenMai />} />
+          <Route path="/thongkehoadon" element={<ThongKeHoaDon />} />
         </Route>
       </Routes>
     </BrowserRouter>

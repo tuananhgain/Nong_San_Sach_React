@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import api_index, api_sortSanPhamTheoDm, api_danhmuc, api_search, api_trangsanpham,api_chitietsanpham,api_khuyenmai,api_dangky, api_dangnhap, api_dangxuat, api_quanli_hoadon, api_change_status,api_quanli_khuyenmai
+from .views import api_index, api_sortSanPhamTheoDm, api_danhmuc, api_search, api_trangsanpham,api_chitietsanpham,api_khuyenmai,api_dangky, api_dangnhap, api_dangxuat, api_quanli_hoadon, api_change_status,api_quanli_khuyenmai, api_them_km,api_xoa_khuyenmai, api_thongke_hoadon
 
 urlpatterns = [
     path("", api_index, name="api_index"),
@@ -15,4 +15,7 @@ urlpatterns = [
     path("hoadon/", api_quanli_hoadon, name="api_quanli_hoadon"),
     path("change_status/", api_change_status, name="api_change_status"),
     path("quanli_khuyenmai/", api_quanli_khuyenmai, name="api_quanli_khuyenmai"),
+    path("them_khuyenmai/", api_them_km, name="api_them_khuyenmai"),
+    path("xoa_khuyenmai/", api_xoa_khuyenmai, name="api_xoa_khuyenmai"),
+    path("thongke_hoadon/", api_thongke_hoadon, name="api_thongke_hoadon"),
 ]
