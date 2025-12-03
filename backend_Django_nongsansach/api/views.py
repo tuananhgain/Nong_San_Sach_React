@@ -6,6 +6,7 @@ from .serializers import SanPhamSerializer, DanhMucSerializer
 from django.shortcuts import get_object_or_404
 from django.conf import settings
 from datetime import date
+from django.utils.dateparse import parse_date
 import uuid
 from django.db.models import Count
 import os
@@ -327,11 +328,118 @@ def api_quanli_khuyenmai(request):
         {
             "makm": km.makm,
             "tenkm": km.tenkm,
-            "ngaybatdau": km.ngaybatdau,
-            "ngayketthuc": km.ngayketthuc,
+            "ngaybd": km.ngaybd,
+            "ngaykt": km.ngaykt,
             "giamgia": km.giamgia,
         }
         for km in khuyenmais
     ]
 
     return Response({"status": "success", "data": data})
+
+@api_view(['POST'])
+def api_them_km(request):
+    tenKM = request.data.get('tenKM')
+    ngayBatDau = request.data.get('ngayBatDau')
+    ngayKetThuc = request.data.get('ngayKetThuc')
+    phanTramGiam = request.data.get('phanTramGiam')
+
+    # Validate
+    if not tenKM or not ngayBatDau or not ngayKetThuc or not phanTramGiam:
+        return Response({"status": "error", "message": "Thiếu thông tin!"}, status=400)
+
+    if int(phanTramGiam) <= 0:
+        return Response({"status": "error", "message": "Phần trăm giảm không hợp lệ!"}, status=400)
+
+    # Tạo mã tự động
+    last_km = khuyenmai.objects.aggregate(max_id=Max('makm'))["max_id"]
+    if last_km:
+        last_index = int(last_km[2:])
+    else:
+        last_index = 0
+    new_makm = f"KM{last_index + 1:03d}"
+
+    # Tạo đối tượng
+    km = khuyenmai.objects.create(
+        makm=new_makm,
+        tenkm=tenKM,
+        ngaybd=parse_date(ngayBatDau),
+        ngaykt=parse_date(ngayKetThuc),
+        giamgia=int(phanTramGiam)
+    )
+
+    return Response({
+        "status": "success",
+        "message": "Thêm khuyến mãi thành công!",
+        "data": {
+            "makm": km.makm,
+            "tenkm": km.tenkm,
+            "ngaybd": km.ngaybd,
+            "ngaykt": km.ngaykt,
+            "giamgia": km.giamgia,
+        }
+    })
+
+@api_view(['POST'])
+def api_xoa_khuyenmai(request):
+    makm = request.data.get("makm")
+
+    if not makm:
+        return Response({"status": "error", "message": "Thiếu mã KM"}, status=400)
+
+    try:
+        km = khuyenmai.objects.get(makm=makm)
+        km.delete()
+        return Response({"status": "success", "message": "Đã xóa"})
+    except khuyenmai.DoesNotExist:
+        return Response({"status": "error", "message": "Không tìm thấy"}, status=404)
+
+@api_view(['GET'])
+def api_thongke_hoadon(request):
+    time_filter = request.GET.get('time', '')
+    dshd = hoadon.objects.filter(trangthaihd="HOÀN THÀNH").order_by('-mahd')
+
+    current_date = timezone.now().date()
+
+    # --- Lọc theo thời gian ---
+    if time_filter:
+        if time_filter == "Theo Ngày":
+            dshd = dshd.filter(ngaydat__date=current_date)
+
+        elif time_filter == "Theo Tuần":
+            start_of_week = current_date - timedelta(days=current_date.weekday())
+            end_of_week = start_of_week + timedelta(days=6)
+            dshd = dshd.filter(
+                ngaydat__date__gte=start_of_week,
+                ngaydat__date__lte=end_of_week
+            )
+
+        elif time_filter == "Theo Tháng":
+            dshd = dshd.filter(
+                ngaydat__month=current_date.month,
+                ngaydat__year=current_date.year
+            )
+
+        elif time_filter == "Theo Năm":
+            dshd = dshd.filter(
+                ngaydat__year=current_date.year
+            )
+
+    # --- Convert dữ liệu về JSON ---
+    data = [
+        {
+            "mahd": hd.mahd,
+            "makh": hd.makh.makh if hd.makh else None,
+            "tenkh": hd.makh.tenkh if hd.makh else None,
+            "ngaydat": hd.ngaydat,
+            "tongtien": hd.tongtien,
+            "trangthaihd": hd.trangthaihd,
+        }
+        for hd in dshd
+    ]
+
+    return Response({
+        "status": "success",
+        "count": len(data),
+        "data": data
+    })
