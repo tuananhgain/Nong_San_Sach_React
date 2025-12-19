@@ -25,7 +25,7 @@ export default function ThongKeHoaDon() {
 
     return (
         <div className="container py-4">
-            <h1 className="text-center text-success text-uppercase fw-bold mb-4">
+            <h1 className="text-center text-danger text-uppercase fw-bold mb-4">
                 Thống Kê Đơn Hàng
             </h1>
 

@@ -15,6 +15,7 @@ import Layout_Admin from "./components/Layout_Admin";
 import QuanLyHoaDon from "./pages/QuanLy_HoaDon";
 import QuanLyKhuyenMai from "./pages/QuanLy_KhuyenMai";
 import ThongKeHoaDon from "./pages/ThongKeHoaDon";
+import GioHang from "./pages/GioHang";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { MessageProvider } from "./context/MessageContext";
 
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="/dangnhap" element={<DangNhap/>}/>
         <Route element={<Layout2 />}>
             <Route path="/lienhe" element={<LienHe />} />
+            <Route path="/giohang" element={<GioHang />} />
         </Route>
         <Route element={<Layout_Admin />}>
           <Route path="/quanlyhoadon" element={<QuanLyHoaDon />} />
