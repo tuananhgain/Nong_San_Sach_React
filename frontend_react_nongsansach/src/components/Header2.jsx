@@ -96,7 +96,7 @@ export default function Header() {
             </>
           )}
 
-          <Link className="btn btn-warning text-dark ms-2" to="/cart">
+          <Link className="btn btn-warning text-dark ms-2" to="/giohang">
             Giỏ hàng
           </Link>
         </div>

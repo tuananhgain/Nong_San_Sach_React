@@ -170,15 +170,23 @@ class Cart_SP:
                 sp = sanpham.objects.get(masp=masp)
                 self.masanpham = sp.masp
                 self.tensanpham = sp.tensp
-                self.giatien = sp.gia_sau_km()
                 self.hinhanh = getattr(sp, "hinhanh", None)
                 self.dvt = sp.donvitinh
+
+                # ⭐ Tính giá sau KM (thay cho sp.gia_sau_km())
+                if hasattr(sp, "makm") and sp.makm:
+                    giam = sp.makm.giamgia  # %
+                    self.giatien = int(sp.gia1dv - (sp.gia1dv * giam / 100))
+                else:
+                    self.giatien = sp.gia1dv
+
             except sanpham.DoesNotExist:
                 pass
-     # ✨ thêm property tính tổng tiền 1 sản phẩm
+
     @property
     def tong_tien(self):
         return (self.giatien or 0) * self.soluong
+
 
 
 class Cart:
@@ -230,19 +238,13 @@ class Cart:
                 for sp in self.listSP
             ]
         }
-
     # --- tạo lại object từ session ---
     @classmethod
     def from_dict(cls, data):
         cart = cls()
         for item in data.get("listSP", []):
-            sp = Cart_SP()
-            sp.masanpham = item.get("masanpham")
-            sp.tensanpham = item.get("tensanpham")
-            sp.giatien = item.get("giatien")
-            sp.hinhanh = item.get("hinhanh")
-            sp.dvt = item.get("dvt")
-            sp.soluong = item.get("soluong", 1)
+            sp = Cart_SP(item.get("masanpham"), item.get("soluong", 1))
             cart.listSP.append(sp)
         return cart
+
 

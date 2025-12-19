@@ -27,10 +27,12 @@ export default function Login() {
 
   try {
     const res = await fetch("http://127.0.0.1:8000/api/dangnhap/", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  credentials: "include",   
+  body: JSON.stringify({username: form.username, password: form.password}),
+});
+
 
     const data = await res.json();
 

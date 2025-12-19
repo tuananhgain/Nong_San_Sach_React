@@ -82,7 +82,7 @@ export default function KhuyenMaiList() {
 
     return (
         <div className="container py-4">
-            <h1 className="text-center text-success fw-bold mb-4">
+            <h1 className="text-center text-danger fw-bold mb-4">
                 Danh sách khuyến mãi
             </h1>
 

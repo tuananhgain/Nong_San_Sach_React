@@ -54,17 +54,26 @@ export default function ChiTietSanPham() {
       cancelButtonText: "Không",
     }).then((result) => {
       if (result.isConfirmed) {
-        axios
-          .post("http://127.0.0.1:8000/api/giohang/add/", {
+       axios
+        .post(
+          "http://127.0.0.1:8000/api/gio_hang/",
+          {
             productId: sp.masp,
             quantity: quantity,
-          })
-          .then(() =>
-            Swal.fire("Thành công!", "Đã thêm vào giỏ hàng!", "success")
-          )
-          .catch(() =>
-            Swal.fire("Lỗi", "Không thể thêm vào giỏ hàng!", "error")
-          );
+          },
+          {
+            withCredentials: true,
+            
+          }
+        )
+        .then(() =>
+          Swal.fire("Thành công!", "Đã thêm vào giỏ hàng!", "success")
+        )
+        .catch((err) => {
+          console.error("Lỗi thêm vào giỏ hàng:", err);
+          Swal.fire("Lỗi", "Không thể thêm vào giỏ hàng!", "error")
+        });
+
       }
     });
   };

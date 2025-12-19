@@ -32,7 +32,7 @@ export default function Layout_Admin() {
         <ul className="nav nav-pills flex-column mb-auto">
 
           <li className="nav-item mb-2">
-            <NavLink to="/quanli/donhang" className={({ isActive }) =>
+            <NavLink to="/quanlyhoadon" className={({ isActive }) =>
               "nav-link text-white " + (isActive ? "active-link" : "")
             }>
               <i className="bi bi-bag"></i> Đơn Hàng

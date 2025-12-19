@@ -11,8 +11,9 @@ import uuid
 from django.db.models import Count
 import os
 from django.db.models import Max
+from django.utils.decorators import method_decorator
 from django.utils import timezone
-from .models import dmsanpham,sanpham,nhacc,khachhang,loaithetv,capnhatthe,khuyenmai,nhanvien,hinhanhsp,hoadon,tknhanvien,tkkhachhang,chitiethoadon
+from .models import dmsanpham,sanpham,nhacc,khachhang,loaithetv,capnhatthe,khuyenmai,nhanvien,hinhanhsp,hoadon,tknhanvien,tkkhachhang,chitiethoadon,Cart_SP,Cart
 from .serializers import SanPhamSerializer, DanhMucSerializer
 
 @api_view(["GET"])
@@ -184,50 +185,48 @@ def api_dangnhap(request):
     if not username or not password:
         return Response({"status": "error", "message": "Thiếu username hoặc password"}, status=400)
 
-    # Check tài khoản khách hàng
     account = tkkhachhang.objects.filter(tentk=username).first()
     admin = tknhanvien.objects.filter(tentk=username).first()
 
-    # === Khách hàng ===
-    if account:
-        if account.matkhau == password:
-            kh = khachhang.objects.filter(makh=account.makh).values("makh", "tenkh").first()
+    if account and account.matkhau == password:
+        kh = khachhang.objects.filter(makh=account.makh).values("makh", "tenkh").first()
 
-            # Tạo token login đơn giản
-            token = str(uuid.uuid4())
+        request.session["IsAuthenticated"] = True
+        request.session["UserId"] = kh["makh"]
+        request.session["Role"] = "customer"
 
-            return Response({
-                "status": "success",
-                "message": "Đăng nhập thành công",
-                "role": "customer",
-                "token": token,
-                "data": {
-                    "username": account.tentk,
-                    "makh": kh["makh"] if kh else None,
-                    "tenkh": kh["tenkh"] if kh else "",
-                }
-            })
-        else:
-            return Response({"status": "error", "message": "Mật khẩu không đúng"}, status=400)
+        request.session.modified = True
+        request.session.save()
 
-    # === Admin ===
-    if admin:
-        if admin.matkhau == password:
-            token = str(uuid.uuid4())
-            return Response({
-                "status": "success",
-                "message": "Đăng nhập admin thành công",
-                "role": "admin",
-                "token": token,
-                "data": {
-                    "username": admin.tentk
-                }
-            })
-        else:
-            return Response({"status": "error", "message": "Sai mật khẩu admin"}, status=400)
+        return Response({
+            "status": "success",
+            "message": "Đăng nhập thành công",
+            "role": "customer",
+            "data": {
+                "username": account.tentk,
+                "makh": kh["makh"],
+                "tenkh": kh["tenkh"]
+            }
+        })
 
-    # Không tìm thấy tài khoản
-    return Response({"status": "error", "message": "Tài khoản không tồn tại"}, status=404)
+    if admin and admin.matkhau == password:
+        request.session["IsAuthenticated"] = True
+        request.session["Role"] = "admin"
+        request.session["AdminUser"] = admin.tentk
+
+        request.session.modified = True
+        request.session.save()
+
+        return Response({
+            "status": "success",
+            "message": "Đăng nhập admin thành công",
+            "role": "admin",
+            "data": {"username": admin.tentk}
+        })
+
+    return Response({"status": "error", "message": "Tài khoản không tồn tại hoặc sai mật khẩu"}, status=400)
+
+
 
 @api_view(['POST'])
 def api_dangxuat(request):
@@ -442,4 +441,136 @@ def api_thongke_hoadon(request):
         "status": "success",
         "count": len(data),
         "data": data
+    })
+
+########################################## GIỎ HÀNG###########################################
+
+# ---------------------------
+# API: Lấy giỏ hàng
+# ---------------------------
+@api_view(['GET'])
+def api_open_cart(request):
+
+    # Kiểm tra đăng nhập
+    #if not request.session.get("IsAuthenticated"):
+        #return Response({
+            #"status": "error",
+            #"message": "Vui lòng đăng nhập để vào giỏ hàng."
+        #}, status=401)
+
+    cart_data = request.session.get("cart")
+    cart = Cart.from_dict(cart_data) if cart_data else Cart()
+
+
+    return Response({
+        "status": "success",
+        "cart": cart.to_dict(),
+        "tong_tien": cart.tong_tien,
+    })
+
+
+# ---------------------------
+# API: Thêm sản phẩm vào giỏ
+# ---------------------------
+from django.views.decorators.csrf import csrf_exempt
+
+
+@api_view(['POST'])
+def api_gio_hang(request):
+
+    product_id = request.data.get("productId")
+    quantity = int(request.data.get("quantity", 1))
+
+    # Chưa đăng nhập
+    #if not request.session.get("IsAuthenticated"):
+        #return Response({
+            #"status": "error",
+            #"message": "Vui lòng đăng nhập trước khi thêm sản phẩm vào giỏ hàng."
+        #}, status=401)
+
+    if not product_id or quantity <= 0:
+        return Response({"status": "error", "message": "Dữ liệu không hợp lệ"}, status=400)
+
+    sp_instance = get_object_or_404(sanpham, masp=product_id)
+
+    # Kiểm tra tồn kho
+    if sp_instance.soluongtk <= 0:
+        return Response({
+            "status": "error",
+            "message": f"Sản phẩm '{sp_instance.tensp}' đang hết hàng."
+        }, status=400)
+
+    # Lấy giỏ hàng
+    cart_data = request.session.get("cart")
+    cart = Cart.from_dict(cart_data) if cart_data else Cart()
+
+    # Thêm sản phẩm
+    cart.them_sp(product_id, quantity)
+
+    # Lưu session
+    request.session["cart"] = cart.to_dict()
+    request.session.modified = True
+
+    return Response({
+        "status": "success",
+        "message": f"Đã thêm {quantity} sản phẩm '{sp_instance.tensp}' vào giỏ.",
+        "cart": cart.to_dict(),
+        "tong_tien": cart.tong_tien,
+    })
+
+
+
+# ---------------------------
+# API: Cập nhật số lượng
+# ---------------------------
+@api_view(['POST'])
+def api_update_quantity(request):
+
+    masp = request.data.get("masp")
+    delta = int(request.data.get("quantityChange", 0))
+
+    if not masp:
+        return Response({"status": "error", "message": "Thiếu mã sản phẩm"}, status=400)
+
+    cart_data = request.session.get("cart")
+    cart = Cart.from_dict(cart_data) if cart_data else Cart()
+
+    cart.cap_nhat_sl(masp, delta)
+
+    request.session["cart"] = cart.to_dict()
+    request.session.modified = True
+
+    return Response({
+        "status": "success",
+        "message": "Đã cập nhật số lượng",
+        "cart": cart.to_dict(),
+        "tong_tien": cart.tong_tien
+    })
+
+
+
+# ---------------------------
+# API: Xóa sản phẩm khỏi giỏ
+# ---------------------------
+@api_view(['POST'])
+def api_remove_from_cart(request):
+
+    masp = request.data.get("product_id")
+
+    if not masp:
+        return Response({"status": "error", "message": "Thiếu mã sản phẩm"}, status=400)
+
+    cart_data = request.session.get("cart")
+    cart = Cart.from_dict(cart_data) if cart_data else Cart()
+
+    cart.xoa_sp(masp)
+
+    request.session["cart"] = cart.to_dict()
+    request.session.modified = True
+
+    return Response({
+        "status": "success",
+        "message": "Đã xóa sản phẩm khỏi giỏ",
+        "cart": cart.to_dict(),
+        "tong_tien": cart.tong_tien
     })
