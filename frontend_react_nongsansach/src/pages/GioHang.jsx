@@ -42,7 +42,7 @@ export default function OpenCart() {
     };
 
     if (loading) return <h3 className="text-center mt-5">Đang tải giỏ hàng...</h3>;
-    if (!cart || cart.listSP.length === 0)
+    if (!cart || !cart.listSP ||cart.listSP.length === 0)
         return <h3 className="text-center mt-5">Giỏ hàng trống.</h3>;
 
     return (
@@ -62,9 +62,9 @@ export default function OpenCart() {
                 <div className="row align-items-center text-center py-3 border-bottom" key={item.masanpham}>
                     <div className="col-2">
                         <img
-                            src={`http://127.0.0.1:8000/static/HinhAnh/Hình ${item.masanpham}/HINH1.jfif`}
+                            src={`HinhAnh/Hình ${item.masanpham}/HINH1.jfif`}
                             className="img-fluid rounded"
-                            alt=""
+                            alt={item.tensanpham}
                         />
                     </div>
 
@@ -110,7 +110,7 @@ export default function OpenCart() {
             </div>
 
             <div className="d-flex justify-content-between mt-3">
-                <a href="/sanpham" className="btn btn-secondary">
+                <a href="/trangsanpham" className="btn btn-secondary">
                     Tiếp tục mua sắm
                 </a>
                 <a href="/thanhtoan" className="btn btn-primary">

@@ -5,7 +5,10 @@ from .models import sanpham, dmsanpham
 from .serializers import SanPhamSerializer, DanhMucSerializer
 from django.shortcuts import get_object_or_404
 from django.conf import settings
-from datetime import date
+from datetime import date, timedelta
+from django.db import transaction
+from django.db.models import F
+import random
 from django.utils.dateparse import parse_date
 import uuid
 from django.db.models import Count
@@ -183,20 +186,33 @@ def api_dangnhap(request):
     password = request.data.get("password")
 
     if not username or not password:
-        return Response({"status": "error", "message": "Thiếu username hoặc password"}, status=400)
+        return Response(
+            {"status": "error", "message": "Thiếu username hoặc password"},
+            status=400
+        )
 
     account = tkkhachhang.objects.filter(tentk=username).first()
     admin = tknhanvien.objects.filter(tentk=username).first()
 
+    # ======================
+    # KHÁCH HÀNG
+    # ======================
     if account and account.matkhau == password:
-        kh = khachhang.objects.filter(makh=account.makh).values("makh", "tenkh").first()
+        kh = khachhang.objects.filter(makh=account.makh)\
+                              .values("makh", "tenkh")\
+                              .first()
+
+        # 🔥🔥🔥 BẮT BUỘC: TẠO SESSION KEY
+        if not request.session.session_key:
+            request.session.create()
 
         request.session["IsAuthenticated"] = True
         request.session["UserId"] = kh["makh"]
         request.session["Role"] = "customer"
 
         request.session.modified = True
-        request.session.save()
+
+        print("SESSION KEY:", request.session.session_key)
 
         return Response({
             "status": "success",
@@ -209,13 +225,21 @@ def api_dangnhap(request):
             }
         })
 
+    # ======================
+    # ADMIN
+    # ======================
     if admin and admin.matkhau == password:
+
+        if not request.session.session_key:
+            request.session.create()
+
         request.session["IsAuthenticated"] = True
         request.session["Role"] = "admin"
         request.session["AdminUser"] = admin.tentk
 
         request.session.modified = True
-        request.session.save()
+
+        print("SESSION KEY:", request.session.session_key)
 
         return Response({
             "status": "success",
@@ -224,8 +248,10 @@ def api_dangnhap(request):
             "data": {"username": admin.tentk}
         })
 
-    return Response({"status": "error", "message": "Tài khoản không tồn tại hoặc sai mật khẩu"}, status=400)
-
+    return Response(
+        {"status": "error", "message": "Tài khoản không tồn tại hoặc sai mật khẩu"},
+        status=400
+    )
 
 
 @api_view(['POST'])
@@ -250,7 +276,7 @@ def api_quanli_hoadon(request):
 
     # Lọc theo phương thức thanh toán
     if payment:
-        hoadons = hoadons.filter(phuongthucthanhtoan__iexact=payment)
+        hoadons = hoadons.filter(phuongthucthtoan__iexact=payment)
 
     # Sắp xếp giảm dần theo mã hóa đơn
     hoadons = hoadons.order_by('-mahd')
@@ -451,13 +477,20 @@ def api_thongke_hoadon(request):
 @api_view(['GET'])
 def api_open_cart(request):
 
-    # Kiểm tra đăng nhập
-    #if not request.session.get("IsAuthenticated"):
-        #return Response({
-            #"status": "error",
-            #"message": "Vui lòng đăng nhập để vào giỏ hàng."
-        #}, status=401)
+    print("SESSION:", request.session.items())
+    print("BEFORE:", request.session.session_key)
 
+    if not request.session.session_key:
+        request.session.create()
+
+    print("AFTER:", request.session.session_key)
+
+    # Kiểm tra đăng nhập
+    if not request.session.get("IsAuthenticated"):
+        return Response({
+            "status": "error",
+            "message": "Vui lòng đăng nhập để vào giỏ hàng."
+    }, status=401)
     cart_data = request.session.get("cart")
     cart = Cart.from_dict(cart_data) if cart_data else Cart()
 
@@ -482,12 +515,11 @@ def api_gio_hang(request):
     quantity = int(request.data.get("quantity", 1))
 
     # Chưa đăng nhập
-    #if not request.session.get("IsAuthenticated"):
-        #return Response({
-            #"status": "error",
-            #"message": "Vui lòng đăng nhập trước khi thêm sản phẩm vào giỏ hàng."
-        #}, status=401)
-
+    if not request.session.get("IsAuthenticated"):
+        return Response({
+            "status": "error",
+            "message": "Vui lòng đăng nhập trước khi thêm sản phẩm vào giỏ hàng."
+        }, status=401)
     if not product_id or quantity <= 0:
         return Response({"status": "error", "message": "Dữ liệu không hợp lệ"}, status=400)
 
@@ -573,4 +605,179 @@ def api_remove_from_cart(request):
         "message": "Đã xóa sản phẩm khỏi giỏ",
         "cart": cart.to_dict(),
         "tong_tien": cart.tong_tien
+    })
+
+######################################THANH TOÁN###########################################
+
+
+@api_view(['GET'])
+def api_thanh_toan(request):
+    cart = request.session.get('cart')
+
+    if not cart or len(cart.get('listSP', [])) == 0:
+        return Response({
+            "status": "error",
+            "message": "Giỏ hàng trống"
+        }, status=400)
+
+    # ✅ Khách hàng đăng nhập
+    ma_kh = request.session.get('UserId')
+    khach = khachhang.objects.filter(makh=ma_kh).values(
+        "makh", "tenkh", "sdt", "diachi"
+    ).first() if ma_kh else None
+
+    # ✅ Khuyến mãi
+    km = khuyenmai.objects.last()
+    giamgia = km.giamgia if km else 0
+
+    tong_tien_goc = 0
+    gio_hang_hop_le = True
+    errors = []
+
+    for sp in cart['listSP']:
+        try:
+            sp_db = sanpham.objects.get(masp=sp['masanpham'])
+            sp['tensp'] = sp_db.tensp
+            sp['soluongton'] = sp_db.soluongtk
+        except sanpham.DoesNotExist:
+            gio_hang_hop_le = False
+            errors.append(f"Sản phẩm {sp['masanpham']} không tồn tại")
+            continue
+
+        soluong = int(sp['soluong'])
+        giatien = int(sp['giatien'])
+        sp['thanhtien'] = soluong * giatien
+        tong_tien_goc += sp['thanhtien']
+
+        if sp_db.soluongtk <= 0:
+            gio_hang_hop_le = False
+            errors.append(f"{sp_db.tensp} đã hết hàng")
+        elif soluong > sp_db.soluongtk:
+            gio_hang_hop_le = False
+            errors.append(
+                f"{sp_db.tensp} chỉ còn {sp_db.soluongtk} sản phẩm"
+            )
+
+    if not gio_hang_hop_le:
+        return Response({
+            "status": "error",
+            "errors": errors
+        }, status=400)
+
+    tong_tien_sau_giam = (
+        int(tong_tien_goc * (1 - giamgia / 100))
+        if giamgia else tong_tien_goc
+    )
+
+    request.session["tong_tien_thanh_toan"] = tong_tien_sau_giam
+    request.session.modified = True
+
+    return Response({
+        "status": "success",
+        "cart": cart,
+        "khach": khach,
+        "giamgia": giamgia,
+        "tong_tien_goc": tong_tien_goc,
+        "tong_tien_sau_giam": tong_tien_sau_giam
+    })
+
+@api_view(['POST'])
+@transaction.atomic
+def api_dat_hang(request):
+    ship_method = request.data.get("ship_method")
+    payment_method = request.data.get("payment_method")
+
+    if not ship_method or not payment_method:
+        return Response({
+            "status": "error",
+            "message": "Thiếu phương thức giao hàng hoặc thanh toán"
+        }, status=400)
+
+    cart = request.session.get('cart')
+    if not cart or len(cart.get('listSP', [])) == 0:
+        return Response({
+            "status": "error",
+            "message": "Giỏ hàng trống"
+        }, status=400)
+
+    # ✅ Khách hàng
+    ma_kh = request.session.get('UserId')
+    khach = khachhang.objects.filter(makh=ma_kh).first()
+
+    # ✅ Sinh mã hóa đơn
+    last_hd = hoadon.objects.order_by('-mahd').first()
+    last_index = int(last_hd.mahd[2:]) if last_hd else 0
+    new_mahd = f"HD{last_index + 1:03d}"
+
+    # ✅ Khuyến mãi
+    km = khuyenmai.objects.last()
+    giamgia = km.giamgia if km else 0
+
+    tong_tien_goc = sum(
+    int(sp['giatien']) * int(sp['soluong'])
+    for sp in cart['listSP']
+    )
+
+    tongtien = (
+        int(tong_tien_goc * (1 - giamgia / 100))
+        if giamgia else tong_tien_goc
+    )
+
+
+    ngay_giao = date.today() + timedelta(days=3)
+    nv = random.choice(list(nhanvien.objects.all()))
+
+    # ✅ Tạo hóa đơn
+    new_hd = hoadon.objects.create(
+        mahd=new_mahd,
+        makh=khach,
+        ngaydat=date.today(),
+        trangthaihd="ĐANG CHỜ",
+        phuongthucgh=ship_method,
+        phuongthucthtoan=payment_method,
+        ngaygiao=ngay_giao,
+        manv=nv,
+        makm=km,
+        tongtien=tongtien
+    )
+
+    # ✅ Lock sản phẩm
+    masp_list = [sp['masanpham'] for sp in cart['listSP']]
+    sanphams = sanpham.objects.select_for_update().filter(masp__in=masp_list)
+    sp_dict = {sp.masp: sp for sp in sanphams}
+
+    last_ct = chitiethoadon.objects.order_by('-macthd').first()
+    last_ct_index = int(last_ct.macthd[4:]) if last_ct else 0
+
+    for item in cart['listSP']:
+        sp = sp_dict.get(item['masanpham'])
+        so_luong = int(item['soluong'])
+
+        if not sp or sp.soluongtk < so_luong:
+            transaction.set_rollback(True)
+            return Response({
+                "status": "error",
+                "message": f"Sản phẩm {item['masanpham']} không đủ hàng"
+            }, status=400)
+
+        sp.soluongtk = F('soluongtk') - so_luong
+        sp.save()
+
+        last_ct_index += 1
+        
+        chitiethoadon.objects.create(
+            macthd=f"CTHD{last_ct_index:03d}",
+            mahd=new_hd,
+            masp=sp,
+            soluongban=so_luong,
+            giaban=item['giatien']
+        )
+
+    # ✅ Xóa giỏ hàng
+    del request.session['cart']
+
+    return Response({
+        "status": "success",
+        "message": "Đặt hàng thành công",
+        "mahd": new_mahd
     })

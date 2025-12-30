@@ -154,13 +154,16 @@ class chitiethoadon(models.Model):
 # ------------------------------------------------
 
 
+########################### CART - CART SP ###########################
+
 
 class Cart_SP:
     """Đại diện cho 1 sản phẩm trong giỏ hàng"""
+
     def __init__(self, masp=None, soluong=1):
         self.masanpham = None
         self.tensanpham = None
-        self.giatien = None
+        self.giatien = 0
         self.hinhanh = None
         self.dvt = None
         self.soluong = soluong
@@ -168,83 +171,90 @@ class Cart_SP:
         if masp:
             try:
                 sp = sanpham.objects.get(masp=masp)
+
                 self.masanpham = sp.masp
                 self.tensanpham = sp.tensp
-                self.hinhanh = getattr(sp, "hinhanh", None)
                 self.dvt = sp.donvitinh
 
-                # ⭐ Tính giá sau KM (thay cho sp.gia_sau_km())
-                if hasattr(sp, "makm") and sp.makm:
-                    giam = sp.makm.giamgia  # %
-                    self.giatien = int(sp.gia1dv - (sp.gia1dv * giam / 100))
+                # ✅ Giá sau khuyến mãi
+                if sp.makm:
+                    self.giatien = int(sp.gia1dv * (1 - sp.makm.giamgia / 100))
                 else:
                     self.giatien = sp.gia1dv
+
+                # ✅ Lấy hình ảnh
+                hinh = hinhanhsp.objects.filter(masp=sp).first()
+                self.hinhanh = hinh.tenhinh if hinh else "HINH1.jfif"
 
             except sanpham.DoesNotExist:
                 pass
 
     @property
     def tong_tien(self):
-        return (self.giatien or 0) * self.soluong
+        return self.giatien * self.soluong
 
+    # ✅ Serialize cho API / session
+    def to_dict(self):
+        return {
+            "masanpham": self.masanpham,
+            "tensanpham": self.tensanpham,
+            "giatien": self.giatien,
+            "soluong": self.soluong,
+            "tong_tien": self.tong_tien,
+            "hinhanh": self.hinhanh,
+            "dvt": self.dvt
+        }
 
 
 class Cart:
-    """Giỏ hàng chứa nhiều Cart_SP"""
+    """Giỏ hàng"""
+
     def __init__(self):
         self.listSP = []
 
-    # --- thêm sản phẩm ---
-    def them_sp(self, masp, soluong):
-        sp = next((item for item in self.listSP if item.masanpham == masp), None)
-        if sp is None:
-            sp_new = Cart_SP(masp, soluong)
-            sp_new.soluong = soluong
-            self.listSP.append(sp_new)
-        else:
+    # ---------------- thêm sản phẩm ----------------
+    def them_sp(self, masp, soluong=1):
+        sp = next((i for i in self.listSP if i.masanpham == masp), None)
+        if sp:
             sp.soluong += soluong
+        else:
+            self.listSP.append(Cart_SP(masp, soluong))
 
-    # --- cập nhật số lượng ---
+    # ---------------- cập nhật số lượng ----------------
     def cap_nhat_sl(self, masp, delta):
-        sp = next((item for item in self.listSP if item.masanpham == masp), None)
+        sp = next((i for i in self.listSP if i.masanpham == masp), None)
         if sp:
             sp.soluong += delta
             if sp.soluong <= 0:
                 self.listSP.remove(sp)
 
-    # --- xóa sản phẩm ---
+    # ---------------- xóa sản phẩm ----------------
     def xoa_sp(self, masp):
         self.listSP = [sp for sp in self.listSP if sp.masanpham != masp]
 
-    
-
-    # --- tính tổng tiền ---
+    # ---------------- tổng tiền ----------------
     @property
     def tong_tien(self):
-        return sum((sp.giatien or 0) * sp.soluong for sp in self.listSP)
+        return sum(sp.tong_tien for sp in self.listSP)
 
-    # --- chuyển sang dict để lưu session ---
+    # ---------------- lưu session ----------------
     def to_dict(self):
         return {
-            "listSP": [
-                {
-                    "masanpham": sp.masanpham,
-                    "tensanpham": sp.tensanpham,
-                    "giatien": sp.giatien,
-                    "hinhanh": sp.hinhanh,
-                    "dvt": sp.dvt,
-                    "soluong": sp.soluong,
-                }
-                for sp in self.listSP
-            ]
+            "listSP": [sp.to_dict() for sp in self.listSP],
+            "tong_tien": self.tong_tien
         }
-    # --- tạo lại object từ session ---
+
+    # ---------------- khôi phục từ session ----------------
     @classmethod
     def from_dict(cls, data):
         cart = cls()
         for item in data.get("listSP", []):
-            sp = Cart_SP(item.get("masanpham"), item.get("soluong", 1))
+            sp = Cart_SP()
+            sp.masanpham = item.get("masanpham")
+            sp.tensanpham = item.get("tensanpham")
+            sp.giatien = item.get("giatien", 0)
+            sp.soluong = item.get("soluong", 1)
+            sp.hinhanh = item.get("hinhanh")
+            sp.dvt = item.get("dvt")
             cart.listSP.append(sp)
         return cart
-
-

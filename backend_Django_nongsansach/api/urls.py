@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import api_index, api_sortSanPhamTheoDm, api_danhmuc, api_search, api_trangsanpham,api_chitietsanpham,api_khuyenmai,api_dangky, api_dangnhap, api_dangxuat, api_quanli_hoadon, api_change_status,api_quanli_khuyenmai, api_them_km,api_xoa_khuyenmai, api_thongke_hoadon,api_open_cart,api_update_quantity,api_remove_from_cart,api_gio_hang
+from .views import api_index, api_sortSanPhamTheoDm, api_danhmuc, api_search, api_trangsanpham,api_chitietsanpham,api_khuyenmai,api_dangky, api_dangnhap, api_dangxuat, api_quanli_hoadon, api_change_status,api_quanli_khuyenmai, api_them_km,api_xoa_khuyenmai, api_thongke_hoadon,api_open_cart,api_update_quantity,api_remove_from_cart,api_gio_hang,api_thanh_toan,api_dat_hang
 
 urlpatterns = [
     path("", api_index, name="api_index"),
@@ -22,4 +22,7 @@ urlpatterns = [
     path("update_quantity/", api_update_quantity, name="api_update_quantity"),
     path("remove_from_cart/", api_remove_from_cart, name="api_remove_from_cart"),
     path("gio_hang/", api_gio_hang, name="api_gio_hang"),
+    path("thanhtoan/", api_thanh_toan,name='api_thanh_toan'),
+    path("dathang/", api_dat_hang,name='api_dat_hang'),
+
 ]
